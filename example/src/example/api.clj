@@ -1,14 +1,14 @@
 (ns example.api)
 
-(defn product [& nums]
+(defn  ^:export product [& nums]
   {:pre [every? number? nums]}
   (apply * nums))
 
-(defn- mean [nums]
+(defn ^:export mean [nums]
   {:pre [every? number? nums]}
   (/ (apply + nums) (count nums)))
 
-(defn- median [nums]
+(defn ^:export median [nums]
   {:pre [every? number? nums]}
   (let [c (count nums)
         sorted (vec (sort nums))]
@@ -17,7 +17,7 @@
       (mean (let [mid (/ c 2)]
               (subvec sorted (dec mid) (inc mid)))))))
 
-(defn- mode [nums]
+(defn ^:export mode [nums]
   {:pre [every? number? nums]}
   (->> nums
        frequencies
@@ -25,7 +25,7 @@
        last
        key))
 
-(defn stats-meta [& nums]
+(defn ^:export stats-meta [& nums]
   {:pre [every? number? nums]}
   (with-meta
     nums

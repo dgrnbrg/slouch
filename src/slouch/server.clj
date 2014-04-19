@@ -5,7 +5,9 @@
 (defn- ns-funcs [n]
   (let [nsname (ns-name n)]
     (into {}
-          (for [[k v] (ns-publics n) :when (fn? @v)]
+          (for [[k v] (ns-publics n)
+                :when (and (fn? @v)
+                           (:export (meta v)))]
             [(str nsname "/" (name k)) v]))))
 
 (defn wrap-slouch-fn
@@ -37,15 +39,36 @@
       {:status (:exception common/response-codes)
        :slouch {:result t}})))
 
-(defn- default-interceptor [handler]
-  (fn [request]
-    (handler request)))
+(defn build-remotes
+  [service-discovery http-post funcs]
+  (->> 
+    (for [[path var] funcs
+          :let [{:keys [ns name] :as metadata} (meta var)
+                name-sym (symbol (str name "-remote"))]]
+      `((ns ~(ns-name ns))
+        (defn ~name-sym
+          [& args#]
+          (let [base# (~service-discovery)
+                resp# (~http-post base# (pr-str args#))
+                ]
+            (if (<= 200 (:status resp#) 299)
+              (:body resp#)
+              (throw (ex-info (str ~(str "Error when calling " name-sym " with args ") args#) resp#)))))
+        (alter-meta! (var ~name-sym) merge '~(select-keys metadata [:arglists :column :line :file]))))
+    (apply concat)
+    (cons `do)))
+
+;(meta #'build-remotes)
+;(clojure.pprint/pprint(build-remotes '(constantly "http://localhost:8080") '(fn [uri body] (clj-http.client/post uri {:body body})) (ns-funcs 'slouch.server)))
+;(meta #'foo-remote)
 
 (defn handler [exposed-ns & {:keys [interceptors]}]
+  ;; TODO: use core.cache for ns-funcs, to get automatic reloading
   (let [funcs (ns-funcs exposed-ns)]
     (-> handle-request
-        ((get interceptors :gamma default-interceptor))
-        (wrap-slouch-fn ,,, funcs)
-        ((get interceptors :beta default-interceptor))
-        wrap-slouch-serial
-        ((get interceptors :alpha default-interceptor)))))
+        (wrap-slouch-fn funcs)
+        wrap-slouch-serial)))
+
+(defn ^:export foo
+  [a b]
+  (+ a b))
